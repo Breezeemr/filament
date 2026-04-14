@@ -9,7 +9,7 @@
    for final numbers. Writes a markdown results table to stdout in a
    form suitable for piping to docs/bench-results/<date>.md.
 
-   Scenarios (from DESIGN.md):
+   Scenarios (see docs/benchmarks.md and docs/DESIGN.md):
      1. Filament 10-step chain, single call.
      2. Filament 10-step chain, 1000 concurrent vthreads (wall time).
      3. Manifold chain' 10-step baseline on 16-thread fixed executor.
