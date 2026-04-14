@@ -174,6 +174,6 @@ See `docs/testing.md` for details.
 
 ## License
 
-Copyright © 2026 Breezy EMR.
+Copyright © 2026 Breeze Health Platform.
 
 Licensed under the Apache License, Version 2.0. See `LICENSE`.
