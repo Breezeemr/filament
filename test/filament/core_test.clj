@@ -69,3 +69,40 @@
           e (try @d (catch Throwable t t))]
       (is (= "quiet" (ex-message e)))
       (is (zero? (count (.getSuppressed e)))))))
+
+(deftest in-resolves-after-delay
+  (let [start (System/nanoTime)
+        v     @(f/in 30 (fn [] :tick))
+        elapsed-ms (/ (- (System/nanoTime) start) 1e6)]
+    (is (= :tick v))
+    (is (>= elapsed-ms 25))))
+
+(deftest in-error-propagates-with-vthread-frames
+  (let [d (f/in 10 (fn [] (throw (ex-info "boom-in" {}))))
+        e (try @d ::no-throw (catch Throwable t t))]
+    (is (instance? clojure.lang.ExceptionInfo e))
+    (is (= "boom-in" (ex-message e)))
+    ;; The throw ran on a vthread submitted by `in`, so the top frame is
+    ;; the user fn itself — no manifold timer-thread frames in between.
+    (let [frames (map str (.getStackTrace e))]
+      (is (some #(re-find #"filament.core_test" %) frames)))))
+
+(deftest in-cancel-before-tick-prevents-run
+  (let [ran (atom false)
+        d   (f/in 200 (fn [] (reset! ran true) :late))]
+    (f/cancel! d)
+    (Thread/sleep 300)
+    (is (false? @ran))
+    (is (thrown? java.util.concurrent.CancellationException @d))))
+
+(deftest every-ticks-repeatedly-and-cancels
+  (let [hits (atom 0)
+        d    (f/every 20 (fn [] (swap! hits inc)))]
+    (Thread/sleep 120)
+    (f/cancel! d)
+    ;; Let any tick already running on a vthread finish before we snapshot.
+    (Thread/sleep 50)
+    (let [seen @hits]
+      (is (>= seen 3))
+      (Thread/sleep 80)
+      (is (= seen @hits)))))

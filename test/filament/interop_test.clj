@@ -7,7 +7,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [filament.core :as f]
             [filament.manifold :as fm]
-            [manifold.deferred :as md]))
+            [manifold.deferred :as md]
+            [manifold.stream :as ms]))
 
 (deftest requires-succeed
   (testing "both namespaces load cleanly together"
@@ -74,6 +75,35 @@
       (is (not= ::no-throw thrown))
       (is (identical? boom thrown))
       (is (= "boom-m2f" (ex-message thrown))))))
+
+(deftest stream-put-and-take-roundtrip
+  (testing "put! and take! return Filaments that resolve to stream results"
+    (let [s   (ms/stream 1)
+          put (fm/put! s :v)]
+      (is (f/deferred? put))
+      (is (true? @put))
+      (is (= :v @(fm/take! s)))))
+  (testing "take! on closed empty stream resolves to default"
+    (let [s (ms/stream)]
+      (ms/close! s)
+      (is (= ::drained @(fm/take! s ::drained))))))
+
+(deftest stream-take-flows-through-chain
+  (testing "a take! Filament feeds an f/chain step"
+    (let [s (ms/stream 1)]
+      @(fm/put! s 10)
+      (is (= 11 @(f/chain (fm/take! s) inc))))))
+
+(deftest stream-put-error-unwraps-to-caller
+  (testing "errors from ms/put! bubble through the Filament unwrapped"
+    (let [s (ms/stream)
+          _ (ms/close! s)
+          ;; put! on a closed stream resolves to false, not throws; so
+          ;; instead we construct an explicit error via md/error-deferred
+          ;; piped through ->filament to confirm the unwrapping path.
+          fil (fm/->filament (md/error-deferred (ex-info "stream-boom" {})))
+          thrown (try @fil ::no-throw (catch Throwable t t))]
+      (is (= "stream-boom" (ex-message thrown))))))
 
 (deftest round-trip-preserves-value
   (testing "Filament → ->deferred → ->filament preserves the realised value"

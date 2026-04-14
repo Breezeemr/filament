@@ -7,8 +7,13 @@
            (java.util.concurrent Callable
                                  CancellationException
                                  CompletableFuture
+                                 Executors
+                                 ScheduledExecutorService
+                                 ThreadFactory
+                                 TimeUnit
                                  TimeoutException)
            (java.util.concurrent.atomic AtomicReference)
+           (java.util.function BiConsumer)
            (java.util.stream Collectors)))
 
 (defonce ^:private _jdk-check
@@ -230,6 +235,87 @@
     (fn []
       (try (deref-if-deferrable d)
            (finally (f))))))
+
+;; ---------------------------------------------------------------------------
+;; Timing: in, every
+;;
+;; Backed by one daemon-threaded ScheduledExecutorService. Each tick
+;; submits the user body through `impl/filament`, so the body runs on a
+;; virtual thread and a throw carries the vthread's frames — exactly the
+;; trace shape Filament is built for. The scheduler thread itself never
+;; runs user code; it just calls `impl/filament` and returns.
+;; ---------------------------------------------------------------------------
+
+(defonce ^:private scheduler
+  (delay
+    (Executors/newSingleThreadScheduledExecutor
+      (reify ThreadFactory
+        (newThread [_ r]
+          (doto (Thread. ^Runnable r "filament-scheduler")
+            (.setDaemon true)))))))
+
+(defn- unwrap-completion-cause ^Throwable [^Throwable t]
+  (if-let [c (.getCause t)] c t))
+
+(defn in
+  "Run `f` after `ms` milliseconds on a virtual thread and return a
+   Filament that resolves to `f`'s result. Cancelling the returned
+   Filament cancels the pending tick if it has not fired, or interrupts
+   the running body if it has. A throw inside `f` propagates as the
+   Filament's error with frames rooted in the vthread that ran `f`."
+  [ms f]
+  (let [out       ^Filament (impl/deferred)
+        out-cf    ^CompletableFuture (.cf out)
+        child-ref (AtomicReference.)
+        ^ScheduledExecutorService sched @scheduler
+        task      (.schedule sched
+                    ^Runnable (fn []
+                                (when-not (.isDone out-cf)
+                                  (let [child ^Filament (impl/filament f)]
+                                    (.set child-ref child)
+                                    (.whenComplete ^CompletableFuture (.cf child)
+                                      (reify BiConsumer
+                                        (accept [_ v e]
+                                          (if e
+                                            (.completeExceptionally out-cf
+                                              (unwrap-completion-cause e))
+                                            (.complete out-cf v))))))))
+                    (long ms) TimeUnit/MILLISECONDS)]
+    (.whenComplete out-cf
+      (reify BiConsumer
+        (accept [_ _ e]
+          (when e
+            (.cancel task false)
+            (when-let [child ^Filament (.get child-ref)]
+              (cancel! child))))))
+    out))
+
+(defn every
+  "Run `f` on a virtual thread every `ms` milliseconds (optionally after
+   `initial-delay` ms, default 0). Returns a Filament that stays
+   unrealized; `cancel!` on it stops the schedule. A throw inside `f` on
+   any tick is printed to *err* and the schedule continues, matching
+   `manifold.time/every`'s behaviour."
+  ([ms f] (every ms 0 f))
+  ([ms initial-delay f]
+   (let [out    ^Filament (impl/deferred)
+         out-cf ^CompletableFuture (.cf out)
+         ^ScheduledExecutorService sched @scheduler
+         task   (.scheduleAtFixedRate sched
+                  ^Runnable (fn []
+                              (when-not (.isDone out-cf)
+                                (let [child ^Filament (impl/filament f)]
+                                  (.whenComplete ^CompletableFuture (.cf child)
+                                    (reify BiConsumer
+                                      (accept [_ _ e]
+                                        (when e
+                                          (.printStackTrace
+                                            ^Throwable (unwrap-completion-cause e)))))))))
+                  (long initial-delay) (long ms) TimeUnit/MILLISECONDS)]
+     (.whenComplete out-cf
+       (reify BiConsumer
+         (accept [_ _ _] (.cancel task false))))
+     out)))
 
 ;; ---------------------------------------------------------------------------
 ;; Sugar: let-flow and loop

@@ -10,7 +10,8 @@
   manifold; this namespace is the only place that imports it."
   (:require [filament.core :as f]
             [filament.impl :as impl]
-            [manifold.deferred :as md])
+            [manifold.deferred :as md]
+            [manifold.stream :as ms])
   (:import (filament.impl Filament)))
 
 ;; ---------------------------------------------------------------------------
@@ -65,3 +66,34 @@
   own Throwable, not an `ExecutionException` wrapper."
   [^Filament fil]
   (md/->deferred fil))
+
+;; ---------------------------------------------------------------------------
+;; manifold.stream wrappers.
+;;
+;; These are thin adapters: manifold.stream/{put!,take!} already return
+;; manifold deferreds, and `->filament` already bridges those. The point
+;; of having dedicated wrappers is ergonomic — callers working in
+;; Filament-land get Filaments back directly, and the error-unwrapping
+;; semantics of the Deferrable bridge apply without the caller wiring it
+;; up manually.
+;; ---------------------------------------------------------------------------
+
+(defn put!
+  "Put `x` onto `stream`, returning a Filament that resolves to the
+  result of `manifold.stream/put!` (true on accept, false on closed
+  stream). The 4-arity form mirrors `ms/put!` with a timeout and
+  timeout value."
+  ([stream x]
+   (->filament (ms/put! stream x)))
+  ([stream x timeout timeout-val]
+   (->filament (ms/try-put! stream x timeout timeout-val))))
+
+(defn take!
+  "Take a value from `stream`, returning a Filament. Arities mirror
+  `manifold.stream/take!` and `manifold.stream/try-take!`."
+  ([stream]
+   (->filament (ms/take! stream)))
+  ([stream default-val]
+   (->filament (ms/take! stream default-val)))
+  ([stream default-val timeout timeout-val]
+   (->filament (ms/try-take! stream default-val timeout timeout-val))))
