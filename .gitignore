@@ -1,0 +1,38 @@
+# Clojure / tooling
+.cpcache/
+.clj-kondo/
+.lsp/
+.nrepl-port
+.rebel_readline_history
+
+# Build artifacts
+target/
+classes/
+out/
+dist/
+*.class
+*.jar
+pom.xml
+pom.xml.asc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Local settings / secrets
+.env
+.envrc
+.direnv/
+
+# Logs
+*.log

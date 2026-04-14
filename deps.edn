@@ -1,0 +1,31 @@
+{:paths ["src"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
+
+ :aliases
+ {:test
+  {:extra-paths ["test"]
+   :extra-deps {io.github.cognitect-labs/test-runner
+                {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :exec-fn cognitect.test-runner.api/test
+   :exec-args {:excludes [:pinning]}
+   :jvm-opts ["--enable-preview"
+              "-Djdk.tracePinnedThreads=full"]}
+
+  :pinning
+  {:extra-paths ["test" "bench"]
+   :extra-deps {io.github.cognitect-labs/test-runner
+                {:git/tag "v0.5.1" :git/sha "dfb30dd"}
+                manifold/manifold {:mvn/version "0.4.2"}}
+   :exec-fn cognitect.test-runner.api/test
+   :exec-args {:includes [:pinning]}
+   :jvm-opts ["--enable-preview"]}
+
+  :dev
+  {:extra-deps {manifold/manifold {:mvn/version "0.4.2"}}}
+
+  :bench
+  {:extra-paths ["bench"]
+   :extra-deps {criterium/criterium {:mvn/version "0.4.6"}
+                manifold/manifold {:mvn/version "0.4.2"}}
+   :jvm-opts ["--enable-preview"]}}}
