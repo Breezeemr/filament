@@ -105,6 +105,21 @@
           thrown (try @fil ::no-throw (catch Throwable t t))]
       (is (= "stream-boom" (ex-message thrown))))))
 
+(deftest manifold-step-error-in-chain-has-clean-trace
+  (testing "a manifold-deferred-returning step that errors surfaces
+            the original cause with no manifold.deferred.* frames"
+    (let [boom (ex-info "step-boom" {:tag :md-step})
+          e    (try @(f/chain (f/success-deferred 0)
+                              inc
+                              (fn [_] (md/error-deferred boom))
+                              inc)
+                    (catch Throwable t t))
+          frames (mapv #(.getClassName ^StackTraceElement %) (.getStackTrace e))]
+      (is (identical? boom e))
+      (is (= :md-step (:tag (ex-data e))))
+      (is (not-any? #(re-find #"^manifold\.deferred" %) frames)
+          (str "manifold internal frames leaked; frames=" frames)))))
+
 (deftest round-trip-preserves-value
   (testing "Filament → ->deferred → ->filament preserves the realised value"
     (is (= 13 @(fm/->filament (fm/->deferred (f/success-deferred 13))))))

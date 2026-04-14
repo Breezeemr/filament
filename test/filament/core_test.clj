@@ -70,6 +70,26 @@
       (is (= "quiet" (ex-message e)))
       (is (zero? (count (.getSuppressed e)))))))
 
+(deftest finally-handler-that-throws-on-success-path
+  ;; JVM try/finally: if the body completes normally and `finally` throws,
+  ;; the caller sees the finally-handler's exception.
+  (let [d (f/finally (f/success-deferred :ok)
+                     (fn [] (throw (ex-info "fin-boom" {}))))
+        e (try @d ::no-throw (catch Throwable t t))]
+    (is (instance? clojure.lang.ExceptionInfo e))
+    (is (= "fin-boom" (ex-message e)))))
+
+(deftest finally-handler-that-throws-on-error-path
+  ;; JVM try/finally: when the body errors AND finally errors, the
+  ;; finally exception replaces the body exception. The original is
+  ;; not currently attached as suppressed — this pins the contract.
+  (let [orig (ex-info "orig" {:side :body})
+        d    (f/finally (f/filament (fn [] (throw orig)))
+                        (fn [] (throw (ex-info "fin-boom" {}))))
+        e    (try @d ::no-throw (catch Throwable t t))]
+    (is (= "fin-boom" (ex-message e)))
+    (is (not (identical? orig e)))))
+
 (deftest in-resolves-after-delay
   (let [start (System/nanoTime)
         v     @(f/in 30 (fn [] :tick))
@@ -94,6 +114,47 @@
     (Thread/sleep 300)
     (is (false? @ran))
     (is (thrown? java.util.concurrent.CancellationException @d))))
+
+(deftest every-body-throws-continues-ticking
+  ;; Pin the contract: a throw inside a tick body does NOT deschedule
+  ;; f/every — the error is printed and subsequent ticks still fire.
+  ;; (manifold.time/every descheduled on error; filament's contract is
+  ;; "keep going, you handle errors in the body if you want".)
+  (let [hits     (atom 0)
+        orig-err System/err
+        silent   (java.io.PrintStream. (java.io.ByteArrayOutputStream.))]
+    (try
+      (System/setErr silent)
+      (let [d (f/every 20 (fn []
+                            (swap! hits inc)
+                            (throw (ex-info "tick-boom" {}))))]
+        (Thread/sleep 120)
+        (f/cancel! d)
+        (Thread/sleep 30))
+      (finally (System/setErr orig-err)))
+    (is (>= @hits 3)
+        (str "expected the schedule to keep firing after a throw; hits=" @hits))))
+
+(deftest every-cancel-mid-tick-completes-running-body
+  ;; A tick that is already running on a vthread when cancel! fires
+  ;; is not interrupted by our schedule cancellation (task.cancel(false)
+  ;; only affects scheduler-owned state). The in-flight body completes
+  ;; normally; no further ticks fire.
+  (let [hits (atom 0)
+        mid  (java.util.concurrent.CountDownLatch. 1)
+        done (java.util.concurrent.CountDownLatch. 1)
+        d    (f/every 50 0
+                      (fn []
+                        (swap! hits inc)
+                        (.countDown mid)
+                        (Thread/sleep 80)
+                        (.countDown done)))]
+    (is (.await mid 500 TimeUnit/MILLISECONDS))
+    (f/cancel! d)
+    (is (.await done 500 TimeUnit/MILLISECONDS))
+    (Thread/sleep 150)
+    (is (= 1 @hits)
+        (str "expected exactly one completed tick after mid-tick cancel; hits=" @hits))))
 
 (deftest every-ticks-repeatedly-and-cancels
   (let [hits (atom 0)

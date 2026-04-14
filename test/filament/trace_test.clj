@@ -64,6 +64,24 @@
     (is (= 1 (count marks))
         (str "expected exactly one forked-from marker, got " (count marks)))))
 
+(deftest deep-chain-failure-trace-is-clean
+  ;; 10k-step chain with an error at the last step. The caller must see
+  ;; the original ex-info unwrapped, with no executor noise in the
+  ;; trace, and a bounded number of suppressed entries (not one per
+  ;; step). This defends filament.core's "bounded, inline" chain claim.
+  (let [steps  (concat (repeat 10000 inc)
+                       [(fn [_] (throw (ex-info "deep" {:tag :deep})))])
+        e      (try @(apply f/chain (f/success-deferred 0) steps)
+                    (catch Throwable t t))
+        frames (frame-classes e)]
+    (is (= "deep" (ex-message e)))
+    (is (= :deep (:tag (ex-data e))))
+    (is (no-executor-noise? frames)
+        (str "executor frame leaked into deep-chain trace; frames=" frames))
+    (is (<= (count (.getSuppressed e)) 3)
+        (str "too many suppressed entries on a deep chain: "
+             (count (.getSuppressed e))))))
+
 (deftest capture-traces-off-suppresses-nothing
   (binding [impl/*capture-traces* false]
     (let [e (try @(f/zip (f/filament (fn [] (throw (ex-info "x" {})))))

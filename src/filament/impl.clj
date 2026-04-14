@@ -129,7 +129,12 @@
          trace  (when *capture-traces*
                   (Throwable. (str "filament: submit site " marker)))
          exec   ^ExecutorService (or executor *executor* @default-executor)
+         ;; Capture the caller's dynamic-var frame so bindings established
+         ;; around the filament call site are visible inside the body on
+         ;; its vthread. Matches clojure.core/future-call / bound-fn*.
+         frame  (clojure.lang.Var/getThreadBindingFrame)
          body   ^Runnable (fn []
+                            (clojure.lang.Var/resetThreadBindingFrame frame)
                             (.set runner (Thread/currentThread))
                             (try
                               (.complete cf (f))
