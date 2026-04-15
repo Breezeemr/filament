@@ -79,13 +79,13 @@ carries the `forked from`/`timeout at` marker.
   fork-site trace. Filter by marker label (`"forked from"` /
   `"deref site"` / `"timeout at"`) rather than asserting an exact
   count.
-- `filament.core` excludes `catch`, `finally`, and `loop` from the
+- `filament.deferred` excludes `catch`, `finally`, and `loop` from the
   `clojure.core` refer; inside filament-core code, qualify them as
   `clojure.core/catch` etc. Inside `try` forms the `catch`/`finally`
   special-form names are resolved syntactically, not as vars, so
   shadowing them at the ns level is fine.
 - To disable trace capture inside a test, `binding`
-  `filament.impl/*capture-traces*` (not the `filament.core` alias) —
+  `filament.impl/*capture-traces*` (not the `filament.deferred` alias) —
   the `.refer` re-export puts the var in `ns-refers`, not
   `ns-interns`, and some macro contexts can't resolve it through
-  `filament.core`.
+  `filament.deferred`.

@@ -156,12 +156,12 @@ The same code cannot compile against both, because the Clojure compiler
 resolves static class references at compile time. We split the fork
 implementation into two small namespaces — `filament.impl.fork-21` and
 `filament.impl.fork-25` — each exporting three functions (`zip-all`,
-`alt-any`, `with-timeout`) against its JDK's API shape. `filament.core`
+`alt-any`, `with-timeout`) against its JDK's API shape. `filament.deferred`
 detects which is available at first use via
 `Class/forName "java.util.concurrent.StructuredTaskScope$Joiner"`, then
 `require`s the matching namespace and caches the fn lookups in a delay.
 
-`filament.core/zip` / `alt` / `timeout!` keep the trace-capture and
+`filament.deferred/zip` / `alt` / `timeout!` keep the trace-capture and
 fork-site-attach logic in one place; the JDK-specific namespaces are
 pure scope-execution helpers. This means the JDK 21 code path is *never
 compiled* on a JDK 25 host and vice versa, so neither side needs to use
@@ -285,7 +285,7 @@ alias has no JVM flags so downstream apps don't inherit our diagnostics.
 
 ## Public API surface
 
-All of the following live in `filament.core` and are re-exported from
+All of the following live in `filament.deferred` and are re-exported from
 `filament.deferred` under Manifold-compatible names.
 
 **Constructors**
@@ -371,7 +371,7 @@ the correct vthread.
 
 `filament.manifold` uses `extend` to add `manifold.deferred/IDeferred` and
 `manifold.deferred/IDeferrable` implementations, reusing the `CompletableFuture`'s
-`whenComplete` for `on-realized`. This keeps `filament.core` loadable without
+`whenComplete` for `on-realized`. This keeps `filament.deferred` loadable without
 manifold on the classpath; the bridge is opt-in.
 
 ## Dynamic configuration
@@ -391,7 +391,7 @@ manifold on the classpath; the bridge is opt-in.
 ```
 
 No `with-executor` macro; use `binding`. The shared executor is held in a
-top-level `delay` so requiring `filament.core` on JDK < 21 fails at first
+top-level `delay` so requiring `filament.deferred` on JDK < 21 fails at first
 use, not at load time — useful for tools that scan namespaces.
 
 ## Error model (the rules, in order)

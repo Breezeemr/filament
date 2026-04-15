@@ -2,24 +2,24 @@
 
 `filament.manifold` is an optional bridge namespace. Requiring it adds
 Manifold protocol implementations to `filament.impl.Filament` and
-exposes explicit conversion functions. `filament.core` remains loadable
+exposes explicit conversion functions. `filament.deferred` remains loadable
 on a classpath with no Manifold present, and has no compile-time
 reference to Manifold.
 
 ## Load order
 
 ```clojure
-(require 'filament.core)
-(require 'filament.manifold)  ; must come after filament.core
+(require 'filament.deferred)
+(require 'filament.manifold)  ; must come after filament.deferred
 ```
 
 The bridge uses protocol extension (not `extend-type` on the deftype),
 so `filament.impl.Filament` must already be loaded. In practice this
-means always requiring `filament.core` first.
+means always requiring `filament.deferred` first.
 
 Manifold is only on the classpath under `:dev`, `:test`, and `:bench`.
 The main `:deps` map has no Manifold dependency — adding one would
-undermine the core pitch that `filament.core` loads standalone.
+undermine the core pitch that `filament.deferred` loads standalone.
 
 ## What the bridge does
 
@@ -41,7 +41,7 @@ undermine the core pitch that `filament.core` loads standalone.
 
 ## `deferred?` delegation
 
-`filament.core/deferred?` recognizes Manifold deferreds when Manifold
+`filament.deferred/deferred?` recognizes Manifold deferreds when Manifold
 is on the classpath, via a lazily-resolved delegate:
 
 ```clojure
@@ -53,7 +53,7 @@ is on the classpath, via a lazily-resolved delegate:
       (catch Throwable _ nil))))
 ```
 
-`filament.core` itself never references Manifold by name, so loading
+`filament.deferred` itself never references Manifold by name, so loading
 the namespace on a Manifold-less classpath is fine — the delay stays
 nil and only the `Filament` instance check runs.
 
@@ -72,9 +72,9 @@ nil and only the `Filament` instance check runs.
 ## Verifying core-only loads
 
 ```bash
-clojure -Sdeps '{:paths ["src"]}' -e "(require 'filament.core) :ok"
+clojure -Sdeps '{:paths ["src"]}' -e "(require 'filament.deferred) :ok"
 ```
 
 Should print `:ok`. If you see a `ClassNotFoundException` for anything
-under `manifold/`, something in `filament.core` has started referencing
+under `manifold/`, something in `filament.deferred` has started referencing
 Manifold directly and needs to be pushed behind the lazy delegate.

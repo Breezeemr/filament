@@ -50,7 +50,7 @@ Not yet published to Clojars. For now:
 ## Quickstart
 
 ```clojure
-(require '[filament.core :as f])
+(require '[filament.deferred :as f])
 
 ;; Basic chain
 @(f/chain (f/success-deferred 1) inc inc inc)
@@ -109,7 +109,7 @@ Trace capture is on by default and costs about 100 ns per chain. Turn
 it off for hot paths that have measured it and care:
 
 ```clojure
-(binding [filament.core/*capture-traces* false]
+(binding [filament.deferred/*capture-traces* false]
   ...)
 ```
 
@@ -136,10 +136,10 @@ an unrealized deferred. See `docs/DESIGN.md` and
 ## Manifold interop
 
 `filament.manifold` is an optional bridge. Load it after
-`filament.core` and Filaments become drop-in for existing manifold
+`filament.deferred` and Filaments become drop-in for existing manifold
 code — `md/chain` accepts them as seeds, `md/deferrable?` recognizes
 them, and `->filament` / `->deferred` do explicit round-tripping.
-`filament.core` itself has zero compile-time reference to Manifold
+`filament.deferred` itself has zero compile-time reference to Manifold
 and loads fine without it on the classpath.
 
 See `docs/manifold-interop.md` for the full story.
@@ -151,7 +151,9 @@ See `docs/manifold-interop.md` for the full story.
   must not block a platform carrier (Netty event loops, etc.) should
   keep using Manifold.
 - **JDK < 21.** Loom is the entire point; there is no fallback.
-- **A streams library.** `manifold.stream` has no equivalent yet.
+- **A streams library.** `filament.stream` wraps `manifold.stream`'s
+  `put!`/`take!` into Filament-returning adapters, but the stream
+  types themselves are still manifold's.
   Scope is larger and out of the v0.1 cut.
 
 ## Testing
