@@ -1,7 +1,7 @@
 (ns filament.let-flow-test
   (:refer-clojure :exclude [loop])
   (:require [clojure.test :refer [deftest is testing]]
-            [filament.core :as f :refer [let-flow loop]]))
+            [filament.deferred :as f :refer [let-flow loop]]))
 
 (deftest let-flow-derefs-deferred-bindings
   (is (= 3 @(let-flow [a (f/success-deferred 1)

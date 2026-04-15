@@ -18,7 +18,7 @@
 
    Acceptance: ratio Filament/Manifold < 2x on scenarios 1 and 4."
   (:require [criterium.core :as cc]
-            [filament.core :as f]
+            [filament.deferred :as f]
             [filament.impl :as impl]
             [manifold.deferred :as md]
             [manifold.executor :as mex])

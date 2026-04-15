@@ -1,6 +1,6 @@
 (ns filament.chain-test
   (:require [clojure.test :refer [deftest is testing]]
-            [filament.core :as f]))
+            [filament.deferred :as f]))
 
 (deftest chain-sync-steps
   (is (= 4 @(f/chain (f/success-deferred 1) inc inc inc))))

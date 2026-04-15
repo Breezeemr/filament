@@ -3,7 +3,7 @@
    on a modest payload. Used by the pinning diagnostic test: run this in
    a sub-JVM with -Djdk.tracePinnedThreads=full and assert stderr does
    not contain 'Thread is pinned'. Kept deliberately cheap (<500ms)."
-  (:require [filament.core :as f]))
+  (:require [filament.deferred :as f]))
 
 (defn run! []
   ;; chain

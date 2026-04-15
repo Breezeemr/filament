@@ -1,6 +1,6 @@
 (ns filament.trace-test
   (:require [clojure.test :refer [deftest is]]
-            [filament.core :as f]
+            [filament.deferred :as f]
             [filament.impl :as impl]))
 
 (defn- frame-classes [^Throwable t]
@@ -68,7 +68,7 @@
   ;; 10k-step chain with an error at the last step. The caller must see
   ;; the original ex-info unwrapped, with no executor noise in the
   ;; trace, and a bounded number of suppressed entries (not one per
-  ;; step). This defends filament.core's "bounded, inline" chain claim.
+  ;; step). This defends filament.deferred's "bounded, inline" chain claim.
   (let [steps  (concat (repeat 10000 inc)
                        [(fn [_] (throw (ex-info "deep" {:tag :deep})))])
         e      (try @(apply f/chain (f/success-deferred 0) steps)

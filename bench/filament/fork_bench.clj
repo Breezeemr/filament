@@ -9,7 +9,7 @@
    fork-specific regressions without sitting through the full chain
    report. Uses criterium's quick-bench for everything."
   (:require [criterium.core :as cc]
-            [filament.core :as f]
+            [filament.deferred :as f]
             [manifold.deferred :as md]
             [manifold.executor :as mex])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)))

@@ -1,6 +1,6 @@
 (ns filament.fork-test
   (:require [clojure.test :refer [deftest is testing]]
-            [filament.core :as f])
+            [filament.deferred :as f])
   (:import (java.util.concurrent CancellationException TimeoutException)
            (java.util.concurrent.atomic AtomicBoolean)))
 

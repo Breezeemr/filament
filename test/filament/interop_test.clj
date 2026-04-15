@@ -5,34 +5,35 @@
   the classpath there. The 'core alone loads without manifold' check
   happens in the verification shell commands, not here."
   (:require [clojure.test :refer [deftest is testing]]
-            [filament.core :as f]
-            [filament.manifold :as fm]
+            [filament.deferred :as f]
+            filament.manifold
+            [filament.stream :as fs]
             [manifold.deferred :as md]
             [manifold.stream :as ms]))
 
 (deftest requires-succeed
   (testing "both namespaces load cleanly together"
-    (is (some? (find-ns 'filament.core)))
+    (is (some? (find-ns 'filament.deferred)))
     (is (some? (find-ns 'filament.manifold)))
     (is (some? (find-ns 'manifold.deferred)))))
 
 (deftest ->filament-from-manifold
   (testing "wrapping a realised manifold success-deferred"
-    (is (= 1 @(fm/->filament (md/success-deferred 1)))))
+    (is (= 1 @(f/->filament (md/success-deferred 1)))))
   (testing "wrapping an unrealised manifold deferred that later succeeds"
     (let [md' (md/deferred)
-          fil (fm/->filament md')]
+          fil (f/->filament md')]
       (md/success! md' 99)
       (is (= 99 @fil))))
   (testing "wrapping a Filament is a no-op"
     (let [fil (f/success-deferred 7)]
-      (is (identical? fil (fm/->filament fil))))))
+      (is (identical? fil (f/->filament fil))))))
 
 (deftest ->deferred-from-filament
   (testing "wrapping a realised Filament success-deferred"
-    (is (= 2 @(fm/->deferred (f/success-deferred 2)))))
+    (is (= 2 @(md/->deferred (f/success-deferred 2)))))
   (testing "wrapping a computation that completes later"
-    (is (= 42 @(fm/->deferred (f/filament (fn [] (Thread/sleep 5) 42)))))))
+    (is (= 42 @(md/->deferred (f/filament (fn [] (Thread/sleep 5) 42)))))))
 
 (deftest filament-as-input-to-manifold-chain
   (testing "manifold.deferred/chain accepts a Filament as its seed value"
@@ -51,7 +52,7 @@
                         inc)))))
 
 (deftest deferred?-recognises-manifold
-  (testing "filament.core/deferred? returns true for manifold deferreds"
+  (testing "filament.deferred/deferred? returns true for manifold deferreds"
     (is (f/deferred? (md/success-deferred 1)))
     (is (f/deferred? (md/deferred)))
     (is (f/deferred? (f/success-deferred 1)))
@@ -61,7 +62,7 @@
 (deftest error-unwrapping-filament-to-manifold
   (testing "Filament error surfaces to manifold without ExecutionException wrapping"
     (let [boom (ex-info "boom-f2m" {:side :filament})
-          md'  (fm/->deferred (f/filament (fn [] (throw boom))))
+          md'  (md/->deferred (f/filament (fn [] (throw boom))))
           thrown (try @md' ::no-throw (catch Throwable t t))]
       (is (not= ::no-throw thrown))
       (is (identical? boom thrown))
@@ -70,7 +71,7 @@
 (deftest error-unwrapping-manifold-to-filament
   (testing "manifold error surfaces to Filament without manifold wrapping"
     (let [boom (ex-info "boom-m2f" {:side :manifold})
-          fil  (fm/->filament (md/error-deferred boom))
+          fil  (f/->filament (md/error-deferred boom))
           thrown (try @fil ::no-throw (catch Throwable t t))]
       (is (not= ::no-throw thrown))
       (is (identical? boom thrown))
@@ -79,20 +80,20 @@
 (deftest stream-put-and-take-roundtrip
   (testing "put! and take! return Filaments that resolve to stream results"
     (let [s   (ms/stream 1)
-          put (fm/put! s :v)]
+          put (fs/put! s :v)]
       (is (f/deferred? put))
       (is (true? @put))
-      (is (= :v @(fm/take! s)))))
+      (is (= :v @(fs/take! s)))))
   (testing "take! on closed empty stream resolves to default"
     (let [s (ms/stream)]
       (ms/close! s)
-      (is (= ::drained @(fm/take! s ::drained))))))
+      (is (= ::drained @(fs/take! s ::drained))))))
 
 (deftest stream-take-flows-through-chain
   (testing "a take! Filament feeds an f/chain step"
     (let [s (ms/stream 1)]
-      @(fm/put! s 10)
-      (is (= 11 @(f/chain (fm/take! s) inc))))))
+      @(fs/put! s 10)
+      (is (= 11 @(f/chain (fs/take! s) inc))))))
 
 (deftest stream-put-error-unwraps-to-caller
   (testing "errors from ms/put! bubble through the Filament unwrapped"
@@ -101,7 +102,7 @@
           ;; put! on a closed stream resolves to false, not throws; so
           ;; instead we construct an explicit error via md/error-deferred
           ;; piped through ->filament to confirm the unwrapping path.
-          fil (fm/->filament (md/error-deferred (ex-info "stream-boom" {})))
+          fil (f/->filament (md/error-deferred (ex-info "stream-boom" {})))
           thrown (try @fil ::no-throw (catch Throwable t t))]
       (is (= "stream-boom" (ex-message thrown))))))
 
@@ -122,7 +123,7 @@
 
 (deftest round-trip-preserves-value
   (testing "Filament → ->deferred → ->filament preserves the realised value"
-    (is (= 13 @(fm/->filament (fm/->deferred (f/success-deferred 13))))))
+    (is (= 13 @(f/->filament (md/->deferred (f/success-deferred 13))))))
   (testing "->filament on an already-Filament input is identity"
     (let [fil (f/success-deferred 13)]
-      (is (identical? fil (fm/->filament fil))))))
+      (is (identical? fil (f/->filament fil))))))

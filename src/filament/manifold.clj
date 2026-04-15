@@ -1,17 +1,25 @@
 (ns filament.manifold
   "Optional interop bridge between Filament and Manifold.
 
-  Load order matters: `(require 'filament.core)` must precede
+  Load order matters: `(require 'filament.deferred)` must precede
   `(require 'filament.manifold)`, because this namespace extends the
   already-loaded `filament.impl/Filament` class with manifold's
-  `Deferrable` protocol.
+  `Deferrable` protocol (and the reverse).
 
-  `filament.core` has no compile-time or load-time dependency on
-  manifold; this namespace is the only place that imports it."
-  (:require [filament.core :as f]
-            [filament.impl :as impl]
-            [manifold.deferred :as md]
-            [manifold.stream :as ms])
+  This namespace is pure protocol plumbing: it exposes no public
+  functions. Once loaded, `manifold.deferred/->deferred` on a Filament
+  adapts it into a genuine manifold deferred with unwrapped error
+  propagation. The reverse direction — manifold deferred to Filament —
+  needs nothing from this namespace: `filament.impl` already extends
+  the `Filamentable` protocol to `clojure.lang.IPending`, which
+  manifold's `Deferred` implements, so `filament.deferred/->filament`
+  on a manifold deferred Does The Right Thing whether or not this
+  bridge is loaded. `filament.deferred` has no compile-time or
+  load-time dependency on manifold; this namespace is the only place
+  that imports it. Callers who want `manifold.stream`-style
+  `put!`/`take!` returning Filaments should use `filament.stream`
+  (which pulls in this namespace)."
+  (:require [manifold.deferred :as md])
   (:import (filament.impl Filament)))
 
 ;; ---------------------------------------------------------------------------
@@ -40,7 +48,7 @@
   (to-deferred [^Filament fil]
     (let [out (md/deferred)]
       ;; Bridge via CompletableFuture.whenComplete so we don't depend on
-      ;; filament.core/on-realized (which doesn't exist) and so error
+      ;; filament.deferred/on-realized (which doesn't exist) and so error
       ;; propagation is unwrapped: manifold sees the child's root cause,
       ;; not an ExecutionException.
       (.whenComplete ^java.util.concurrent.CompletableFuture (.cf fil)
@@ -50,50 +58,3 @@
               (md/error! out (if-let [c (.getCause ^Throwable e)] c e))
               (md/success! out v)))))
       out)))
-
-(defn ->filament
-  "Adapt any manifold-deferrable value `x` to a Filament. If `x` is
-  already a Filament it is returned unchanged, so round-tripping
-  through `->deferred` → `->filament` is a no-op."
-  [x]
-  (if (instance? Filament x)
-    x
-    (f/filament (fn [] @(md/->deferred x)))))
-
-(defn ->deferred
-  "Adapt a Filament to a `manifold.deferred/deferred`. Error propagation
-  is unwrapped: the resulting deferred errors with the Filament body's
-  own Throwable, not an `ExecutionException` wrapper."
-  [^Filament fil]
-  (md/->deferred fil))
-
-;; ---------------------------------------------------------------------------
-;; manifold.stream wrappers.
-;;
-;; These are thin adapters: manifold.stream/{put!,take!} already return
-;; manifold deferreds, and `->filament` already bridges those. The point
-;; of having dedicated wrappers is ergonomic — callers working in
-;; Filament-land get Filaments back directly, and the error-unwrapping
-;; semantics of the Deferrable bridge apply without the caller wiring it
-;; up manually.
-;; ---------------------------------------------------------------------------
-
-(defn put!
-  "Put `x` onto `stream`, returning a Filament that resolves to the
-  result of `manifold.stream/put!` (true on accept, false on closed
-  stream). The 4-arity form mirrors `ms/put!` with a timeout and
-  timeout value."
-  ([stream x]
-   (->filament (ms/put! stream x)))
-  ([stream x timeout timeout-val]
-   (->filament (ms/try-put! stream x timeout timeout-val))))
-
-(defn take!
-  "Take a value from `stream`, returning a Filament. Arities mirror
-  `manifold.stream/take!` and `manifold.stream/try-take!`."
-  ([stream]
-   (->filament (ms/take! stream)))
-  ([stream default-val]
-   (->filament (ms/take! stream default-val)))
-  ([stream default-val timeout timeout-val]
-   (->filament (ms/try-take! stream default-val timeout timeout-val))))
