@@ -1,11 +1,13 @@
 (ns filament.impl
   (:import (java.util.concurrent CompletableFuture
+                                 CompletionStage
                                  ExecutionException
                                  ExecutorService
                                  Executors
                                  TimeUnit
                                  TimeoutException)
-           (java.util.concurrent.atomic AtomicReference)))
+           (java.util.concurrent.atomic AtomicReference)
+           (java.util.function BiConsumer)))
 
 (def ^:dynamic *capture-traces*
   "When true (the default) Filament captures a Throwable at every submit
@@ -167,3 +169,61 @@
 (defn error!
   [^Filament d ^Throwable e]
   (.completeExceptionally ^CompletableFuture (.cf d) e))
+
+;; ---------------------------------------------------------------------------
+;; Filamentable protocol
+;;
+;; Open extension point for adapting foreign async values to Filaments.
+;; Extend this to your own async types and they flow through
+;; filament.deferred combinators; `filament.manifold` extends it to
+;; manifold's IDeferred so manifold deferreds bridge without a hard
+;; dependency here.
+;; ---------------------------------------------------------------------------
+
+(defprotocol Filamentable
+  "Protocol for values that can be adapted to a Filament."
+  (to-filament [x]
+    "Return a Filament that resolves to the eventual value of `x`. Must
+     return a `filament.impl.Filament`; callers rely on that concrete
+     type for deref/cancel/linear-trace semantics."))
+
+(defn- complete-stage-bridge
+  ^Filament [^CompletionStage stage]
+  (let [d (deferred)]
+    (.whenComplete stage
+      (reify BiConsumer
+        (accept [_ v e]
+          (if e
+            (error! d (if-let [c (.getCause ^Throwable e)] c e))
+            (success! d v)))))
+    d))
+
+(extend-protocol Filamentable
+  Filament
+  (to-filament [x] x)
+
+  CompletableFuture
+  (to-filament [x] (complete-stage-bridge x))
+
+  CompletionStage
+  (to-filament [x] (complete-stage-bridge x))
+
+  ;; Structural catch-all for Clojure-side derefable deferreds:
+  ;; manifold `Deferred`, `clojure.core/promise`, `future`, `delay`, and
+  ;; any user type that implements `IPending`. This is what lets
+  ;; `filament.deferred` work with manifold deferreds without a compile-
+  ;; time or load-time manifold dependency. The realized fast path
+  ;; avoids spinning up a vthread for values that are already available;
+  ;; the unrealized path hands off to a vthread so callers don't block.
+  clojure.lang.IPending
+  (to-filament [x]
+    (if (clojure.core/realized? x)
+      (try (success-deferred (deref x))
+           (catch Throwable t (error-deferred t)))
+      (filament (fn [] (deref x))))))
+
+(defn filamentable?
+  "True if `x` satisfies the `Filamentable` protocol — i.e. `to-filament`
+   knows how to adapt it."
+  [x]
+  (satisfies? Filamentable x))
